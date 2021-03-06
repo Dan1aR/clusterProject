@@ -5,7 +5,7 @@
 
 using namespace std;
 
-int ALL_POINTS = 500;
+int ALL_POINTS = 2500;
 
 double sqr(double x)
 {

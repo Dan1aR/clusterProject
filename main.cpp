@@ -5,6 +5,7 @@
 #include <string>
 #include <math.h>
 #include <array>
+#include <algorithm>
 
 //set pointsize 3
 //plot "< awk '{if($3 == \"0\") print}' input.txt" u 1:2 t "red" w p pt 2, "< awk '{if($3 == \"1\") print}' input.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' input.txt" u 1:2 t "blue" w p pt 2
@@ -15,6 +16,7 @@ using namespace std;
 
 int K = 3;
 int INTERVAL = 50;
+float MAX = 100;
 string FILENAME = "input.txt";
 
 //--------------------Functions------------------------------------------
@@ -66,6 +68,15 @@ class SetPoints
             if (y > mostHigh.y)
             {
                 mostHigh.Init(x, y);
+            }
+
+            if (mostHigh.y > MAX)
+            {
+                MAX = mostHigh.y + 1;
+            }
+            if (mostRight.x > MAX)
+            {
+                MAX = mostRight.x + 1;
             }
         }
 
@@ -123,6 +134,28 @@ class Clusters
             }
         }
 
+        void createMatrixDistance(vector< vector<float> > *mtx)
+        {
+
+            for (int i = 0; i < clusters.size(); ++i)
+            {   
+                vector<float> distances = {};
+                for (int j = 0; j < clusters.size(); ++j)
+                {
+                    double R = Rmin(clusters[i], clusters[j]);
+                    if (i != j)
+                    {
+                        distances.push_back(R);
+                    }
+                    if (i == j)
+                    {
+                        distances.push_back(MAX);
+                    }
+                }
+                mtx->push_back(distances);
+            }
+        }
+
         array<double, 3> getNearestClustersIdxs()
         {
             double minR = 1e10;
@@ -146,6 +179,26 @@ class Clusters
             return IJR;
         }
 
+        array<double, 3> getNearestClustersIdxs(vector< vector<float> > *mtx)
+        {
+            vector<float> mins;
+            vector<int> minsJ;
+            
+            for (int i = 0; i < mtx->size(); ++i)
+            {
+                int minJ = distance(  (*mtx)[i].begin(), min_element((*mtx)[i].begin(), (*mtx)[i].end())  );
+                //cout << minJ << endl;
+                mins.push_back( (*mtx)[i][minJ] );
+                minsJ.push_back(minJ);
+            }
+
+            int minIJ = distance(mins.begin(), min_element(mins.begin(), mins.end()) );
+            //cout << "!!!!!!!!!!!!!!!!!! :: " << mins[0] << endl;
+            array<double, 3> ijr = { (double)minIJ, (double)minsJ[minIJ], mins[minIJ]};
+            return ijr;
+        }
+
+
         void clustersUnion(int i, int j)
         {
             for (auto& point : clusters[ j ].points)
@@ -153,6 +206,37 @@ class Clusters
                 clusters[ i ].points.push_back(point);
             }
             clusters.erase(clusters.begin() + j );
+        }
+
+        void clustersUnion(int i, int j, vector< vector<float> > *mtx)
+        {
+            //cout << "FLAG " << i << " " << j << endl;
+            for (int l = 0; l < clusters.size(); ++l)
+            {
+                (*mtx)[j][l] = MAX;
+                (*mtx)[l][j] = MAX;
+            }
+
+            for (auto& point : clusters[ j ].points)
+            {
+                clusters[ i ].points.push_back(point);
+            }
+            clusters[j].points = {};
+
+            
+            for (int l = 0; l < clusters.size(); ++l)
+            {   
+                if ( (i != j) && ( (*mtx)[i][l] != MAX))
+                {   
+                    double R = Rmin(clusters[i], clusters[l]);
+                    (*mtx)[i][l] = R;
+                    (*mtx)[l][i] = R;
+                }
+                else
+                {
+                    (*mtx)[i][l] = MAX;
+                }
+            }
         }
 };
 
@@ -400,16 +484,19 @@ class Algorithms
             int clsNum = 1;
             for (auto& sp : cls->clusters)
             {
-                for (auto& point : sp.points)
+                if (sp.points.size() > 0)
                 {
-                    point.nearestCentroidNum = clsNum;
-                    workField.points[i] = point;
-                    i++;
+                    for (auto& point : sp.points)
+                    {
+                        point.nearestCentroidNum = clsNum;
+                        workField.points[i] = point;
+                        i++;
+                    }
+                    clsNum++;
                 }
-                clsNum++;
             }
         }
-        
+
     
     public:
         void Init(SetPoints pfield)
@@ -448,6 +535,40 @@ class Algorithms
             printResult(&workField);
         }
 
+        void hierarchyFast()
+        {
+            Clusters allClusters;
+            allClusters.pointsToClusters(&workField);
+            vector< vector<float> > matrixDistnce;
+            array<double, 3> ijr;
+
+            allClusters.createMatrixDistance(&matrixDistnce);
+
+            double curDelt = 1;
+            double prevDelt = 1;
+            int c = 1;
+
+            while (true)
+            {
+                ijr = allClusters.getNearestClustersIdxs(&matrixDistnce);
+                prevDelt = curDelt;
+                curDelt = ijr[2];
+
+                cout << curDelt << " " << prevDelt << " :: " << curDelt/prevDelt << endl;
+                if (curDelt/prevDelt >= 2.5)
+                {
+                    break;
+                }
+
+                allClusters.clustersUnion((int)ijr[0], (int)ijr[1], &matrixDistnce);
+            }
+            
+            clastersToWorkField(&allClusters);
+            printResult(&workField);
+
+
+        }
+
         void hierarchy()
         {
             Clusters allClusters;
@@ -460,7 +581,7 @@ class Algorithms
             {
                 ijr = allClusters.getNearestClustersIdxs();
                 curDelt = ijr[2];
-                if (curDelt / prevDelt < 2)
+                if (curDelt / prevDelt < 2.5)
                 {
                     allClusters.clustersUnion((int)ijr[0], (int)ijr[1]);
                     prevDelt = curDelt;
@@ -500,9 +621,9 @@ int main()
     alg.Init(field);
 
 
-    alg.kmeans(K);
+    //alg.kmeans(K);
     //alg.wavecluster(INTERVAL);
-    //alg.hierarchy();
+    alg.hierarchyFast();
 
     return 0;
 }
