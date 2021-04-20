@@ -6,38 +6,168 @@
 #include <math.h>
 #include <array>
 #include <algorithm>
+#include <iomanip>
+#include <random>
+#include <map>
+#include <set>
 
-//set pointsize 3
 //plot "< awk '{if($3 == \"0\") print}' input.txt" u 1:2 t "red" w p pt 2, "< awk '{if($3 == \"1\") print}' input.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' input.txt" u 1:2 t "blue" w p pt 2
-
-//plot "< awk '{if($3 == \"0\") print}' output.txt" u 1:2 t "red" w p pt 2, "< awk '{if($3 == \"1\") print}' output.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' output.txt" u 1:2 t "blue" w p pt 2, "< awk '{if($3 == \"3\") print}' output.txt" u 1:2 t "red" w p pt 2
+//plot "< awk '{if($3 == \"1\") print}' output.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' output.txt" u 1:2 t "blue" w p pt 2, "< awk '{if($3 == \"3\") print}' output.txt" u 1:2 t "purpl" w p pt 2
+//plot "< awk '{if($3 == \"1\") print}' output1.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' output1.txt" u 1:2 t "blue" w p pt 2, "< awk '{if($3 == \"3\") print}' output1.txt" u 1:2 t "purpl" w p pt 2
 
 using namespace std;
 
+
+// CONST
 int K = 3;
 int INTERVAL = 50;
-float MAX = 100;
-string FILENAME = "input.txt";
+double CDdivPD = 2.3;
+double CDdivPD__ = 5;
+float MAX = 1000;
+string FILENAME_IN = "input.txt";
+string FILENAME_OUT = "output.txt";
 
-//--------------------Functions------------------------------------------
-double sqr(double x)
-{
-    return x * x;
-}
-//-----------------------------------------------------------------------
+// Function
+double sqr(double x){ return x * x; }
 
+double degrees_to_radians(double degrees){ return degrees * M_PI / 180; }
 
+// Classes
 class Point
 {
     public:
         double x;
         double y;
-        int nearestCentroidNum;
+        unsigned short cluster_mark;
 
-        void Init(double px, double py)
+        Point(double px, double py, unsigned short pcm = 0)
         {
             x = px;
             y = py;
+            cluster_mark = pcm;
+        }
+
+        void change_coordinates(double px, double py)
+        {   
+            x = px;
+            y = py;
+        }
+};
+
+// Drawing Class
+class Oval
+{
+    private:
+        // (x-x0)^2/a^2 + (y-y0)^2/b^2 <= r^2
+        float x0;
+        float y0;
+        float a;
+        float b;
+        // alpha - смещение оси
+        float alf;
+        // number of points - количество точек в овале
+        int number_of_points;
+
+        bool is_inside(float x, float y)
+        {
+            if ( sqr((x-x0)*cos(alf) - (y-y0)*sin(alf))/sqr(a) + sqr((y-y0)*cos(alf) + (x-x0)*sin(alf))/sqr(b) <= 1 )
+            {
+                return true;
+            }
+            return false;
+        }
+
+    public:
+        vector<Point> points;
+
+        Oval(float px0, float py0, float pa, float pb, float palf, int pnop)
+        {
+            x0 = px0;
+            y0 = py0;
+            a = pa;
+            b = pb;
+            alf = palf;
+            number_of_points = pnop;
+        }
+
+        void fill_oval()
+        {
+            int count = 0;
+            double x, y;
+
+            float RIGHT = max(x0+max(abs(a), abs(b)) , y0+max(abs(a), abs(b)));
+            float LEFT = min(x0+min(-abs(a), -abs(b)) , y0+min(-abs(a), -abs(b)));
+
+            while (count <= number_of_points)
+            {
+                x = (RIGHT-LEFT)*((double) rand() / RAND_MAX)+LEFT;
+                y = (RIGHT-LEFT)*((double) rand() / RAND_MAX)+LEFT;
+
+                if (is_inside(x, y))
+                {
+                    Point point(x, y, 0);
+                    points.push_back(point);
+                    count++;
+                }
+                
+            }
+                
+        }
+
+        void fill_oval(string T)
+        {
+            int count = 0;
+            double x, y;
+
+            float RIGHT = max(x0+max(abs(a), abs(b)) , y0+max(abs(a), abs(b)));
+            float LEFT = min(x0+min(-abs(a), -abs(b)) , y0+min(-abs(a), -abs(b)));
+
+            random_device rd{};
+            mt19937 gen{rd()};
+            // values near the mean are the most likely
+            // standard deviation affects the   dispersion of generated values from the mean
+            normal_distribution<> d{0.5, 0.25};
+
+            while (count < number_of_points)
+            {
+                x = (RIGHT-LEFT)*(d(gen))+LEFT;
+                y = (RIGHT-LEFT)*(d(gen))+LEFT;
+
+                if (is_inside(x, y))
+                {
+                    Point point(x, y, 0);
+                    points.push_back(point);
+                    count++;
+                }
+                
+            }
+        }
+
+        void move(float d_x0, float d_y0, float d_alf, float d_radius_vector_alf)
+        {
+            x0 += d_x0;
+            y0 += d_y0;
+
+            x0 = cos(d_radius_vector_alf)*x0 + sin(d_radius_vector_alf)*y0;
+            y0 = -sin(d_radius_vector_alf)*x0 + cos(d_radius_vector_alf)*y0;
+
+            alf += d_alf;
+
+            for (auto& point : points)
+            {
+                point.x += d_x0;
+                point.y += d_y0;
+
+                point.x = cos(d_radius_vector_alf)*point.x + sin(d_radius_vector_alf)*point.y;
+                point.y = -sin(d_radius_vector_alf)*point.x + cos(d_radius_vector_alf)*point.y;
+                
+                float m_x = point.x - x0;
+                float m_y = point.y - y0;
+                m_x = cos(d_alf)*m_x + sin(d_alf)*m_y;
+                m_y = -sin(d_alf)*m_x + cos(d_alf)*m_y;
+                point.x = m_x + x0;
+                point.y = m_y + y0;
+            }
         }
 };
 
@@ -46,41 +176,41 @@ class SetPoints
     public:
         vector<Point> points;
 
-        Point mostLeft;
-        Point mostRight;
-        Point mostBottom;
-        Point mostHigh;
+        Point most_left = {MAX, 0};
+        Point most_right = {-MAX, 0};
+        Point most_bottom = {0, MAX};
+        Point most_high = {0, -MAX};
 
-        void defineSpecPoint(double x, double y)
+        void define_spec_point(double x, double y)
         {
-            if (x < mostLeft.x)
+            if (x < most_left.x)
             {
-                mostLeft.Init(x, y);
+                most_left.change_coordinates(x, y);
             }
-            if (x > mostRight.x)
+            if (x > most_right.x)
             {
-                mostRight.Init(x, y);
+                most_right.change_coordinates(x, y);
             }
-            if (y < mostBottom.y)
+            if (y < most_bottom.y)
             {
-                mostBottom.Init(x, y);
+                most_bottom.change_coordinates(x, y);
             }
-            if (y > mostHigh.y)
+            if (y > most_high.y)
             {
-                mostHigh.Init(x, y);
+                most_high.change_coordinates(x, y);
             }
 
-            if (mostHigh.y > MAX)
+            if (most_high.y > MAX)
             {
-                MAX = mostHigh.y + 1;
+                MAX = most_high.y + 1;
             }
-            if (mostRight.x > MAX)
+            if (most_right.x > MAX)
             {
-                MAX = mostRight.x + 1;
+                MAX = most_right.x + 1;
             }
         }
 
-        void pointsInit(string fileName)
+        void init_points_from_file(string fileName)
         {
             double x;
             double y;
@@ -91,17 +221,25 @@ class SetPoints
 
             while (pointsfile >> x >> y >> clasterNumber)
             {
-                Point point;
-                point.Init(x, y);
+                Point point(x, y, 0);
                 points.push_back(point);
-                
-                defineSpecPoint(x, y);
+                define_spec_point(x, y);
             }
 
             pointsfile.close();
         }
+
+        void add_oval(Oval *oval)
+        {
+            for (auto& oval_point : oval->points)
+            {
+                points.push_back(oval_point);
+                define_spec_point(oval_point.x, oval_point.y);
+            }
+        }
 };
 
+//ВСПОМОГАТЕЛЬНЫЙ КЛАСС для Hierarchy
 class Clusters
 {
     private:
@@ -124,7 +262,7 @@ class Clusters
     public:
         vector<SetPoints> clusters;
 
-        void pointsToClusters(SetPoints *field)
+        void points_to_clusters(SetPoints *field)
         {
             for (auto& point : field->points)
             {
@@ -134,7 +272,7 @@ class Clusters
             }
         }
 
-        void createMatrixDistance(vector< vector<float> > *mtx)
+        void create_matrix_distance(vector< vector<float> > *mtx)
         {
 
             for (int i = 0; i < clusters.size(); ++i)
@@ -156,7 +294,7 @@ class Clusters
             }
         }
 
-        array<double, 3> getNearestClustersIdxs()
+        array<double, 3> get_nearest_clusters_idxs()
         {
             double minR = 1e10;
             int minI, minJ;
@@ -179,7 +317,7 @@ class Clusters
             return IJR;
         }
 
-        array<double, 3> getNearestClustersIdxs(vector< vector<float> > *mtx)
+        array<double, 3> get_nearest_clusters_idxs(vector< vector<float> > *mtx)
         {
             vector<float> mins;
             vector<int> minsJ;
@@ -199,7 +337,7 @@ class Clusters
         }
 
 
-        void clustersUnion(int i, int j)
+        void clusters_union(int i, int j)
         {
             for (auto& point : clusters[ j ].points)
             {
@@ -208,7 +346,7 @@ class Clusters
             clusters.erase(clusters.begin() + j );
         }
 
-        void clustersUnion(int i, int j, vector< vector<float> > *mtx)
+        void clusters_union(int i, int j, vector< vector<float> > *mtx)
         {
             //cout << "FLAG " << i << " " << j << endl;
             for (int l = 0; l < clusters.size(); ++l)
@@ -240,48 +378,116 @@ class Clusters
         }
 };
 
-class Algorithms
+class KMeans
+{
+    private:
+        int k;
+        SetPoints *workField;
+        vector<Point> centroids;
+        void define_k_centroids(int k)
+        {
+            for (int i = 0; i < k; ++i)
+            {
+                double x = (workField->most_right.x - workField->most_left.x)*((double) rand() / RAND_MAX) - workField->most_right.x;
+                double y = (workField->most_high.y - workField->most_bottom.y)*((double) rand() / RAND_MAX) - workField->most_high.y;
+                Point centroid(x, y);
+                centroids.push_back(centroid);
+                //cout << centroids[i].x << " " << centroids[i].y << endl;
+            }
+        }
+
+        int find_nearest_centroid(int k, double x, double y)
+        {
+            double lMin = 1e10;
+            double l;
+            int nearestCentoidNum;
+
+
+            for (int i = 1; i <= k; ++i)
+            {
+                l = sqrt(sqr(x - centroids[i].x) + sqr(y - centroids[i].y));
+                //cout << "l" << i << " : " << l << endl;
+                if (l < lMin)
+                {
+                    lMin = l;
+                    nearestCentoidNum = i;
+                }
+            }
+
+            return nearestCentoidNum;
+        }
+
+        Point reset_cenroid(int k, int centroid_num)
+        {
+            //Some bad code here
+            double cx = 0;
+            double cy = 0;
+            int cn = 0;
+
+            for (auto& point : workField->points)
+            {
+                if (point.cluster_mark == centroid_num)
+                {
+                    cx += point.x;
+                    cy += point.y;
+                    cn++;
+                }
+            }
+            Point newCentroid(cx/cn, cy/cn);
+            return newCentroid;
+        }
+
+    public:
+        KMeans(int p_k, SetPoints *p_work_field)
+        {
+            k = p_k;
+            workField = p_work_field;
+        }
+
+        void kmeans()
+        {
+            cout << "K is :: " << k << endl;
+            define_k_centroids(k);
+            //REPLACE Iterations by Delta
+            for (int i = 0; i < 100; ++i)
+            {
+                for (auto& point : workField->points)
+                {
+                    point.cluster_mark = find_nearest_centroid(k, point.x, point.y);
+                }
+                
+                for (int j = 1; j <= k; ++j)
+                {
+                    centroids[j] = reset_cenroid(k, j);
+                }
+                
+            }
+        }
+
+};
+
+class WaveCluster
 {
     private:
         SetPoints workGridField;
-        SetPoints workField;
-        vector<Point> centroids;
-
-        void printResult(SetPoints *pworkField)
-        {
-            ofstream pointsfile;
-            pointsfile.open("output.txt");
-            //int i = 0;
-            for (auto& point : pworkField->points)
-            {
-                
-                if ( (point.x != 0) && (point.y != 0) )
-                {
-                    //cout << point.x << " " << point.y << " " << point.nearestCentroidNum << "\n";
-                    pointsfile << point.x << " " << point.y << " " << point.nearestCentroidNum << "\n";
-                    //i++;
-                }
-            }
-            //cout << i << endl;
-        }
-        
-        //-----------------------------------------------------------------------
+        SetPoints *workField;
+        int interval;
 
         SetPoints redefineField(int interval)
         {
             SetPoints gridField;
 
-            double deltaX = (workField.mostRight.x - workField.mostLeft.x) / interval;
-            double deltaY = (workField.mostHigh.y - workField.mostBottom.y) / interval;
+            double deltaX = (workField->most_right.x - workField->most_left.x) / interval;
+            double deltaY = (workField->most_high.y - workField->most_bottom.y) / interval;
 
-            double y0 = workField.mostBottom.y;
+            double y0 = workField->most_bottom.y;
             double y1 = y0 + deltaY;
             
             vector<Point> newPoints;
 
             for (int i = 0; i < interval; ++ i)
             {
-                double x0 = workField.mostLeft.x;
+                double x0 = workField->most_left.x;
                 double x1 = x0 + deltaX;
 
                 for (int j = 0; j < interval; ++j)
@@ -290,7 +496,7 @@ class Algorithms
                     double cy = 0;
                     double cn = 0;
 
-                    for (auto& point : workField.points)
+                    for (auto& point : workField->points)
                     {
                         if ((point.x > x0) && (point.x < x1) && (point.y > y0) && (point.y < y1))
                         {
@@ -300,9 +506,8 @@ class Algorithms
                         }
                     }
 
-                    Point newPoint;
-                    newPoint.Init(0, 0);
-                    newPoint.nearestCentroidNum = 0;
+                    Point newPoint(0, 0);
+                    newPoint.cluster_mark = 0;
                     if (cn > 0)
                     {
                         newPoint.x = cx/cn; 
@@ -322,7 +527,7 @@ class Algorithms
             gridField.points = newPoints;
             for (auto& point : gridField.points)
             {
-                gridField.defineSpecPoint(point.x , point.y);
+                gridField.define_spec_point(point.x , point.y);
             }
 
             return gridField;
@@ -332,10 +537,10 @@ class Algorithms
         {
             if ((myi >= 0) && (myj >= 0) && (myi < interval) && (myj < interval))
             {
-                if ( (field->points[interval*(myi)+ myj].x != 0) && (field->points[interval*(myi)+ myj].nearestCentroidNum == 0) )
+                if ( (field->points[interval*(myi)+ myj].x != 0) && (field->points[interval*(myi)+ myj].cluster_mark == 0) )
                 {
                     //cout << mycn << ") " << myi << " " << myj << endl;
-                    field->points[interval*(myi)+ myj].nearestCentroidNum = mycn;
+                    field->points[interval*(myi)+ myj].cluster_mark = mycn;
 
                     recConnectCluster(field, interval, myi+1, myj, mycn);
                     recConnectCluster(field, interval, myi-1, myj, mycn);
@@ -361,10 +566,10 @@ class Algorithms
                 {
                     if (field->points[interval*(i)+ j].x != 0)
                     {
-                        if (field->points[interval*(i)+ j].nearestCentroidNum == 0)
+                        if (field->points[interval*(i)+ j].cluster_mark == 0)
                         {
                             
-                            field->points[interval*(i)+ j].nearestCentroidNum = cn;
+                            field->points[interval*(i)+ j].cluster_mark = cn;
                             
                             recConnectCluster(field, interval, i+1, j, cn);
                             recConnectCluster(field, interval, i-1, j, cn);
@@ -388,24 +593,24 @@ class Algorithms
 
         void gridToWorkField(int interval)
         {
-            double deltaX = (workField.mostRight.x - workField.mostLeft.x) / interval;
-            double deltaY = (workField.mostHigh.y - workField.mostBottom.y) / interval;
+            double deltaX = (workField->most_right.x - workField->most_left.x) / interval;
+            double deltaY = (workField->most_high.y - workField->most_bottom.y) / interval;
 
-            double y0 = workField.mostBottom.y;
+            double y0 = workField->most_bottom.y;
             double y1 = y0 + deltaY;
 
             for (int i = 0; i < interval; ++ i)
             {
-                double x0 = workField.mostLeft.x;
+                double x0 = workField->most_left.x;
                 double x1 = x0 + deltaX;
 
                 for (int j = 0; j < interval; ++j)
                 {
-                    for (auto& point : workField.points)
+                    for (auto& point : workField->points)
                     {
                         if ((point.x > x0) && (point.x < x1) && (point.y > y0) && (point.y < y1))
                         {
-                            point.nearestCentroidNum = workGridField.points[interval*i + j].nearestCentroidNum;
+                            point.cluster_mark = workGridField.points[interval*i + j].cluster_mark;
                         }
                     }
 
@@ -416,67 +621,188 @@ class Algorithms
                 y0 = y1;
                 y1 += deltaY;
             }
-
-
         }
-        //--------------------------------------------------------------------------------------------------------------
 
-        void defineKCentroids(int k)
+    public:
+        WaveCluster(int p_interval, SetPoints *p_work_field)
         {
-            srand (time (0));
-            for (int i = 0; i <= k; ++i)
+            interval = p_interval;
+            workField = p_work_field;
+        }
+
+        void wavecluster()
+        {  
+            workGridField = redefineField(interval);
+            
+            connectComponents(&workGridField, interval);   
+
+            gridToWorkField(interval);
+        }
+};
+
+class HierarchyNew
+{
+    private:
+        SetPoints *work_field;
+        unsigned short N;
+
+        vector <double> distances;
+        vector < array<int, 2> > pairs;
+        map <int, int> num_points_in_cluster;
+        map <int, int> change_colors;
+
+        double R(Point p1, Point p2){ return sqrt(sqr(p1.x - p2.x) + sqr(p1.y - p2.y)); }
+        
+        int num_non_zeros_clusters(map<int, int>& M)
+        {
+            int n = 0;
+            for (auto it : M)
             {
-                double x = (workField.mostRight.x - workField.mostLeft.x)*((double) rand() / RAND_MAX) - workField.mostRight.x;
-                double y = (workField.mostHigh.y - workField.mostBottom.y)*((double) rand() / RAND_MAX) - workField.mostHigh.y;
-                Point centroid;
-                centroid.Init(x, y);
-                centroids.push_back(centroid);
-                cout << centroids[i].x << " " << centroids[i].y << endl;
+                if (it.second > 0)
+                {
+                    ++n;
+                }
+            }
+            return n;
+        }
+
+
+        double partition (vector<double> *arr, int low, int high, vector< array<int, 2> > *sub_arr)
+        {
+            double pivot = arr->at(high);
+            int i = (low - 1);
+        
+            for (int j = low; j <= high- 1; j++)
+            {
+                if (arr->at(j) <= pivot)
+                {
+                    i++;
+                    swap(arr->at(i), arr->at(j));
+                    swap(sub_arr->at(i), sub_arr->at(j));
+                }
+            }
+            swap(arr->at(i + 1), arr->at(high));
+            swap(sub_arr->at(i + 1), sub_arr->at(high));
+            return (i + 1);
+        }
+
+        void quickSort(vector<double> *arr, int low, int high, vector< array<int, 2> > *sub_arr)
+        {
+            if (low < high)
+            {
+                int pi = partition(arr, low, high, sub_arr);
+                quickSort(arr, low, pi - 1, sub_arr);
+                quickSort(arr, pi + 1, high, sub_arr);
             }
         }
 
-        int findNearestCentroid(int k, double x, double y)
-        {
-            double lMin = 1e10;
-            double l;
-            int nearestCentoidNum;
-
-
-            for (int i = 1; i <= k; ++i)
+        void create_distances_vector()
+        {   
+            for (int i = 0; i < work_field->points.size(); ++i)
             {
-                l = sqrt(sqr(x - centroids[i].x) + sqr(y - centroids[i].y));
-                //cout << "l" << i << " : " << l << endl;
-                if (l < lMin)
+                for (int j = i+1; j < work_field->points.size(); ++j)
                 {
-                    lMin = l;
-                    nearestCentoidNum = i;
+                    distances.push_back(R(work_field->points[i], work_field->points[j]));
+                    pairs.push_back({i, j});
                 }
             }
 
-            return nearestCentoidNum;
         }
 
-        Point resetCenroid(int k, int centroidNum)
+        void color_pair(int _i, int _j, int *_cm)
         {
-            //Some bad code here
-            double cx = 0;
-            double cy = 0;
-            int cn = 0;
-
-            for (auto& point : workField.points)
+            if ((work_field->points[_i].cluster_mark == 0) && (work_field->points[_j].cluster_mark == 0))
             {
-                if (point.nearestCentroidNum == centroidNum)
+                work_field->points[_i].cluster_mark = *_cm;
+                work_field->points[_j].cluster_mark = *_cm;
+                num_points_in_cluster[*_cm] = 2; 
+                *_cm += 1;
+            }          
+            else if (work_field->points[_i].cluster_mark * work_field->points[_j].cluster_mark == 0)
+            {
+                int new_cm = max(work_field->points[_i].cluster_mark, work_field->points[_j].cluster_mark);
+
+                while (num_points_in_cluster[ new_cm ] == 0) { new_cm = change_colors[new_cm]; }
+
+                work_field->points[_j].cluster_mark = new_cm;
+                work_field->points[_i].cluster_mark = new_cm;
+
+                num_points_in_cluster[new_cm] += 2;
+            }  
+            else if ( (work_field->points[_i].cluster_mark != 0) && (work_field->points[_j].cluster_mark != 0) )
+            {
+                while (num_points_in_cluster[ work_field->points[_i].cluster_mark ] == 0)
                 {
-                    cx += point.x;
-                    cy += point.y;
-                    cn++;
+                    work_field->points[_i].cluster_mark = change_colors[work_field->points[_i].cluster_mark];
+                }
+                while (num_points_in_cluster[ work_field->points[_j].cluster_mark ] == 0)
+                {
+                    work_field->points[_j].cluster_mark = change_colors[work_field->points[_j].cluster_mark];
+                }
+
+                if (num_points_in_cluster[work_field->points[_i].cluster_mark] < num_points_in_cluster[work_field->points[_j].cluster_mark])
+                {
+                    change_colors[ work_field->points[_i].cluster_mark ] = work_field->points[_j].cluster_mark;
+                    //num_points_in_cluster[work_field->points[_j].cluster_mark] += num_points_in_cluster[work_field->points[_i].cluster_mark];
+                    num_points_in_cluster[work_field->points[_i].cluster_mark] = 0;
+                    num_points_in_cluster[work_field->points[_j].cluster_mark] += 1;
+                }
+                else
+                {
+                    change_colors[ work_field->points[_j].cluster_mark ] = work_field->points[_i].cluster_mark;
+                    //num_points_in_cluster[work_field->points[_i].cluster_mark] += num_points_in_cluster[work_field->points[_j].cluster_mark];
+                    num_points_in_cluster[work_field->points[_j].cluster_mark] = 0;
+                    num_points_in_cluster[work_field->points[_i].cluster_mark] += 1;
+                }
+
+            }
+        }
+
+        void color_last_one()
+        {
+            for (auto& point : work_field->points)
+            {
+                while (num_points_in_cluster[ point.cluster_mark ] == 0)
+                {
+                    point.cluster_mark = change_colors[point.cluster_mark];
                 }
             }
-            Point newCentroid;
-            newCentroid.Init(cx/cn, cy/cn);
-            return newCentroid;
         }
-        //-----------------------------------------------------------------------------------
+
+    public:
+        HierarchyNew(SetPoints *p_work_field, unsigned short p_N)
+        {
+            work_field = p_work_field;
+            N = p_N;
+        }
+
+        void hierarchy()
+        {
+            create_distances_vector();
+            //cout << work_field->points.size() << " : " << distances.size() << endl;
+            quickSort(&distances, 0, distances.size()-1, &pairs);
+
+            cout << "Sorted..." << endl;
+            
+            int cluster_mark = 1;
+
+            for (int i = 0; i < distances.size(); ++i)
+            {
+                color_pair(pairs[i][0], pairs[i][1], &cluster_mark);
+
+                if ((i > N*N*N) && (num_non_zeros_clusters(num_points_in_cluster) <= N))
+                {
+                    break;
+                }
+            }
+            color_last_one();
+        }
+};
+
+class Hierarchy
+{
+    private:
+        SetPoints *workField;
 
         void clastersToWorkField(Clusters *cls)
         {
@@ -488,8 +814,8 @@ class Algorithms
                 {
                     for (auto& point : sp.points)
                     {
-                        point.nearestCentroidNum = clsNum;
-                        workField.points[i] = point;
+                        point.cluster_mark = clsNum;
+                        workField->points[i] = point;
                         i++;
                     }
                     clsNum++;
@@ -497,116 +823,241 @@ class Algorithms
             }
         }
 
-    
     public:
-        void Init(SetPoints pfield)
+        Hierarchy(SetPoints *p_work_field)
         {
-            workField = pfield;
-        }
-
-        void kmeans(int k)
-        {
-            defineKCentroids(k);
-            //REPLACE Iterations by Delta
-            for (int i = 0; i < 100; ++i)
-            {
-                for (auto& point : workField.points)
-                {
-                    point.nearestCentroidNum = findNearestCentroid(k, point.x, point.y);
-                }
-                
-                for (int j = 1; j <= k; ++j)
-                {
-                    centroids[j] = resetCenroid(k, j);
-                }
-                
-            }
-            printResult(&workField);
-        }
-
-        void wavecluster(int interval)
-        {
-            workGridField = redefineField(interval);
-            
-            connectComponents(&workGridField, interval);   
-
-            gridToWorkField(interval); 
-
-            printResult(&workField);
-        }
-
-        void hierarchyFast()
-        {
-            Clusters allClusters;
-            allClusters.pointsToClusters(&workField);
-            vector< vector<float> > matrixDistnce;
-            array<double, 3> ijr;
-
-            allClusters.createMatrixDistance(&matrixDistnce);
-
-            double curDelt = 1;
-            double prevDelt = 1;
-            int c = 1;
-
-            while (true)
-            {
-                ijr = allClusters.getNearestClustersIdxs(&matrixDistnce);
-                prevDelt = curDelt;
-                curDelt = ijr[2];
-
-                cout << curDelt << " " << prevDelt << " :: " << curDelt/prevDelt << endl;
-                if (curDelt/prevDelt >= 2.5)
-                {
-                    break;
-                }
-
-                allClusters.clustersUnion((int)ijr[0], (int)ijr[1], &matrixDistnce);
-            }
-            
-            clastersToWorkField(&allClusters);
-            printResult(&workField);
-
-
+            workField = p_work_field;
         }
 
         void hierarchy()
         {
             Clusters allClusters;
-            allClusters.pointsToClusters(&workField);
+            allClusters.points_to_clusters(workField);
+            vector< vector<float> > matrixDistnce;
             array<double, 3> ijr;
+
+            allClusters.create_matrix_distance(&matrixDistnce);
 
             double curDelt = 1;
             double prevDelt = 1;
-            while (allClusters.clusters.size() > 1)
+
+            while (true)
             {
-                ijr = allClusters.getNearestClustersIdxs();
+                ijr = allClusters.get_nearest_clusters_idxs(&matrixDistnce);
+                prevDelt = curDelt;
                 curDelt = ijr[2];
-                if (curDelt / prevDelt < 2.5)
-                {
-                    allClusters.clustersUnion((int)ijr[0], (int)ijr[1]);
-                    prevDelt = curDelt;
-                }
-                else
+
+                cout << curDelt << " " << prevDelt << " :: " << curDelt/prevDelt << endl;
+                if (curDelt/prevDelt >= CDdivPD)
                 {
                     break;
                 }
 
-
+                allClusters.clusters_union((int)ijr[0], (int)ijr[1], &matrixDistnce);
             }
-
-            //!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            int i = 1;
-            for (auto& cl : allClusters.clusters)
-            {
-                cout << i << ") " << cl.points.size() << endl;
-                i++;
-            }
-            //!!!!!!!!!!!!!!!!!!!!!!!!
             
             clastersToWorkField(&allClusters);
-            printResult(&workField);
-            
         }
+};
+
+class Search
+{
+    public:
+        SetPoints *workField;
+
+        Search(SetPoints *pfield)
+        {
+            workField = pfield;
+        }
+
+        void save_field_to_file(SetPoints *pwork_field, string file_name)
+        {
+            ofstream pointsfile;
+            pointsfile.open(file_name);
+            //int i = 0;
+            for (auto& point : pwork_field->points)
+            {
+                
+                if ( (point.x != 0) && (point.y != 0) )
+                {
+                    //cout << point.x << " " << point.y << " " << point.nearestCentroidNum << "\n";
+                    pointsfile << point.x << " " << point.y << " " << point.cluster_mark << "\n";
+                    //i++;
+                }
+            }
+            //cout << i << endl;
+        }
+
+        void kmeans(int k)
+        {
+            KMeans kmeans_alg(k, workField);
+            kmeans_alg.kmeans();
+            save_field_to_file(workField, FILENAME_OUT);
+        }
+
+        void wavecluster(int interval)
+        {
+            WaveCluster wavecluster_alg(interval, workField);
+            wavecluster_alg.wavecluster();
+            save_field_to_file(workField, FILENAME_OUT);
+        }
+
+        void hierarchy()
+        {
+            Hierarchy hierarchy_alg(workField);
+            hierarchy_alg.hierarchy();
+            save_field_to_file(workField, FILENAME_OUT);
+        }
+
+        void hierarchyNew(int k)
+        {
+            HierarchyNew hierarchyNew_alg(workField, k);
+            hierarchyNew_alg.hierarchy();
+            save_field_to_file(workField, FILENAME_OUT);
+        }
+};
+
+class Interface
+{
+    public:
+        SetPoints *work_field;
+        Search *alg;
+    
+        void place_ovals()
+        {
+            cout << "1 :: Get clouds positions from file" << endl;
+            cout << "2 :: Get clouds positions one by one" << endl;
+            int command = 1;
+             
+            cout << ">>> "; cin >> command;
+            if (command == 1)
+            {
+                string ovals_file_name;
+                cout << "File name with clouds:: ";
+                 
+                cout << ">>> "; cin >> ovals_file_name;
+
+                ifstream pointsfile;
+                pointsfile.open(ovals_file_name);
+
+                float p_x0;
+                float p_y0;
+                float p_a;
+                float p_b;
+                float p_alf;
+                int p_nop;
+
+                while (pointsfile >> p_x0 >> p_y0 >> p_a >> p_b >> p_alf >> p_nop)
+                {
+                    p_alf = degrees_to_radians(p_alf);
+                    Oval oval(p_x0, p_y0, p_a, p_b, p_alf, p_nop);
+                    oval.fill_oval("N");
+                    work_field->add_oval(&oval);
+                }
+                pointsfile.close();
+
+            }
+            if (command == 2)
+            {
+                while (command != 0)
+                {
+                    cout << "1 :: Add cloud" << endl;
+                    cout << "0 :: end" << endl;
+                     
+                    cout << ">>> "; cin >> command;
+
+                    if (command == 1)
+                    {
+                        cout << "Enter params in format :: x0, y0, a, b, alf, number_of_points" << endl;
+                        float p_x0, p_y0, p_a, p_b, p_alf, p_nop;
+                        cout << ">>> "; cin >> p_x0 >> p_y0 >> p_a >> p_b >> p_alf >> p_nop;
+                        p_alf = degrees_to_radians(p_alf);
+                        Oval oval(p_x0, p_y0, p_a, p_b, p_alf, p_nop);
+                        oval.fill_oval("N");
+
+                        int cloud_move_command = 1;
+                        while (cloud_move_command)
+                        {
+                            cout << "Want to move cloud?" << endl;
+                            cout << "1 :: YES" << endl;
+                            cout << "0 :: NO" << endl;
+                            cout << ">>> "; cin >> cloud_move_command;
+                            
+                            if (cloud_move_command)
+                            {
+                                cout << "Enter params in format :: d_x0, d_y0, d_alf, d_radius_vector_alf" << endl;
+                                float d_x0, d_y0, d_alf, d_radius_vector_alf;
+                                cout << ">>> "; cin >> d_x0 >> d_y0 >> d_alf >> d_radius_vector_alf;
+                                d_alf = degrees_to_radians(d_alf);
+                                d_radius_vector_alf = degrees_to_radians(d_radius_vector_alf);
+                                oval.move(d_x0, d_y0, d_alf, d_radius_vector_alf);
+                            }
+                        }
+
+                        work_field->add_oval(&oval);
+                    } 
+                }
+            }
+        }
+
+        void interact()
+        {   
+            cout << "Heyyyyyy, you are in a clustering programm!" << endl;
+
+            int command = 1;
+            while (command != 0)
+            {
+                cout << "1 :: Define your points by ellipse-cloud" << endl;
+                cout << "2 :: start K-mean (Needs number of Clusters)" << endl;
+                cout << "3 :: start WaveCluster (Needs number of Grid-Intervals)" << endl;
+                cout << "4 :: start Hierarchy (Doesn't need clusters number)" << endl;
+                cout << "5 :: start HierarchyNew (Needs number of Clusters)" << endl; 
+                cout << "0 :: Exit" << endl;
+
+
+                cout << ">>> "; cin >> command;
+                if (command == 1)
+                {
+                    place_ovals();
+                    /*alg->save_field_to_file(work_field, FILENAME_OUT);*/
+                    cout << "All clouds are defined!" << endl;
+                }
+                if (command == 2)
+                {
+                    cout << "Define K::" << endl;
+                    cout << ">>> "; cin >> K;
+                    alg->kmeans(K);
+                    cout << "K-means results saved to :: " << FILENAME_OUT << endl;
+                }
+                if (command == 3)
+                {
+                    cout << "Define Grid Interval::" << endl;
+                    cout << ">>> "; cin >> INTERVAL;
+                    alg->wavecluster(INTERVAL);
+                    cout << "WaveCluster results saved to :: " << FILENAME_OUT << endl;
+                }
+                if (command == 4)
+                {
+                    alg->hierarchy();
+                    cout << "Hierarchy results saved to :: " << FILENAME_OUT << endl;
+                }
+                if (command == 5)
+                {
+                    cout << "Define K::" << endl;
+                    cout << ">>> "; cin >> K;
+                    alg->hierarchyNew(K);
+                    cout << "HierarchyNew results saved to :: " << FILENAME_OUT << endl;
+                }
+            } 
+
+        }
+
+        Interface(SetPoints *p_field, Search *p_alg)
+        {
+            work_field = p_field;
+            alg = p_alg;
+        }
+
 };
 
 
@@ -615,15 +1066,10 @@ int main()
     srand(time(NULL));
 
     SetPoints field;
-    Algorithms alg;
+    Search cluster_search_algorithms(&field);
+    Interface user_interface(&field, &cluster_search_algorithms);
 
-    field.pointsInit(FILENAME);
-    alg.Init(field);
-
-
-    //alg.kmeans(K);
-    //alg.wavecluster(INTERVAL);
-    alg.hierarchyFast();
+    user_interface.interact();
 
     return 0;
 }
