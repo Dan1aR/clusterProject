@@ -1,3 +1,7 @@
+//gnuplot visulization commands (Prefer to use analytics.ipynb)
+//plot "< awk '{if($3 == \"0\") print}' input.txt" u 1:2 t "red" w p pt 2, "< awk '{if($3 == \"1\") print}' input.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' input.txt" u 1:2 t "blue" w p pt 2
+//plot "< awk '{if($3 == \"1\") print}' output.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' output.txt" u 1:2 t "blue" w p pt 2, "< awk '{if($3 == \"3\") print}' output.txt" u 1:2 t "purpl" w p pt 2
+
 #include <stdio.h>
 #include <iostream>
 #include <vector>
@@ -9,28 +13,33 @@
 #include <iomanip>
 #include <random>
 #include <map>
-#include <set>
-
-//plot "< awk '{if($3 == \"0\") print}' input.txt" u 1:2 t "red" w p pt 2, "< awk '{if($3 == \"1\") print}' input.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' input.txt" u 1:2 t "blue" w p pt 2
-//plot "< awk '{if($3 == \"1\") print}' output.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' output.txt" u 1:2 t "blue" w p pt 2, "< awk '{if($3 == \"3\") print}' output.txt" u 1:2 t "purpl" w p pt 2
-//plot "< awk '{if($3 == \"1\") print}' output1.txt" u 1:2 t "green" w p pt 2, "< awk '{if($3 == \"2\") print}' output1.txt" u 1:2 t "blue" w p pt 2, "< awk '{if($3 == \"3\") print}' output1.txt" u 1:2 t "purpl" w p pt 2
 
 using namespace std;
 
-
-// CONST
+// GLOBAL VARIABLES
 int K = 3;
-int INTERVAL = 50;
+int INTERVAL = 50; //Change to Treshhold!!!
 double CDdivPD = 2.3;
-double CDdivPD__ = 5;
 float MAX = 1000;
 string FILENAME_IN = "input.txt";
 string FILENAME_OUT = "output.txt";
 
-// Function
-double sqr(double x){ return x * x; }
 
+// Classes Prototypes;
+class Point;
+class Oval;
+class SetPoints;
+class KMeans;
+class WaveCluster;
+class HierarchyNew;
+class Search;
+class Interface;
+
+
+// Usefull Functions
+double sqr(double x){ return x * x; }
 double degrees_to_radians(double degrees){ return degrees * M_PI / 180; }
+
 
 // Classes
 class Point
@@ -54,7 +63,6 @@ class Point
         }
 };
 
-// Drawing Class
 class Oval
 {
     private:
@@ -239,11 +247,11 @@ class SetPoints
         }
 };
 
-//ВСПОМОГАТЕЛЬНЫЙ КЛАСС для Hierarchy
+//Old Ones Start
 class Clusters
 {
     private:
-        double Rmin(SetPoints U, SetPoints V)
+        double Rmin(SetPoints& U, SetPoints& V)
         {
             double minR = 1e10;
             for (auto& u : U.points)
@@ -259,6 +267,7 @@ class Clusters
             }
             return minR;
         }
+        
     public:
         vector<SetPoints> clusters;
 
@@ -312,6 +321,7 @@ class Clusters
                     }
                 }
             }
+
             array<double, 3> IJR = { (double)minI, (double)minJ, minR};
             cout << IJR[0] << " " << IJR[1] << " " << IJR[2] << endl;
             return IJR;
@@ -335,7 +345,6 @@ class Clusters
             array<double, 3> ijr = { (double)minIJ, (double)minsJ[minIJ], mins[minIJ]};
             return ijr;
         }
-
 
         void clusters_union(int i, int j)
         {
@@ -377,7 +386,69 @@ class Clusters
             }
         }
 };
+class Hierarchy
+{
+    private:
+        SetPoints *workField;
 
+        void clastersToWorkField(Clusters *cls)
+        {
+            int i = 0;
+            int clsNum = 1;
+            for (auto& sp : cls->clusters)
+            {
+                if (sp.points.size() > 0)
+                {
+                    for (auto& point : sp.points)
+                    {
+                        point.cluster_mark = clsNum;
+                        workField->points[i] = point;
+                        i++;
+                    }
+                    clsNum++;
+                }
+            }
+        }
+
+    public:
+        Hierarchy(SetPoints *p_work_field)
+        {
+            workField = p_work_field;
+        }
+
+        void hierarchy()
+        {
+            Clusters allClusters;
+            allClusters.points_to_clusters(workField);
+            vector< vector<float> > matrixDistnce;
+            array<double, 3> ijr;
+
+            allClusters.create_matrix_distance(&matrixDistnce);
+
+            double curDelt = 1;
+            double prevDelt = 1;
+
+            while (true)
+            {
+                ijr = allClusters.get_nearest_clusters_idxs(&matrixDistnce);
+                prevDelt = curDelt;
+                curDelt = ijr[2];
+
+                cout << curDelt << " " << prevDelt << " :: " << curDelt/prevDelt << endl;
+                if (curDelt/prevDelt >= CDdivPD)
+                {
+                    break;
+                }
+
+                allClusters.clusters_union((int)ijr[0], (int)ijr[1], &matrixDistnce);
+            }
+            
+            clastersToWorkField(&allClusters);
+        }
+};
+//Old Ones End
+
+// Cluster-Algorithms Goes Here
 class KMeans
 {
     private:
@@ -506,8 +577,7 @@ class WaveCluster
                         }
                     }
 
-                    Point newPoint(0, 0);
-                    newPoint.cluster_mark = 0;
+                    Point newPoint(0, 0, 0);
                     if (cn > 0)
                     {
                         newPoint.x = cx/cn; 
@@ -531,7 +601,7 @@ class WaveCluster
             }
 
             return gridField;
-        }
+        } 
         
         void recConnectCluster(SetPoints *field, int interval, int myi, int myj, int mycn)
         {
@@ -651,7 +721,7 @@ class HierarchyNew
         map <int, int> num_points_in_cluster;
         map <int, int> change_colors;
 
-        double R(Point p1, Point p2){ return sqrt(sqr(p1.x - p2.x) + sqr(p1.y - p2.y)); }
+        double R(Point &p1, Point &p2){ return sqrt(sqr(p1.x - p2.x) + sqr(p1.y - p2.y)); }
         
         int num_non_zeros_clusters(map<int, int>& M)
         {
@@ -665,7 +735,6 @@ class HierarchyNew
             }
             return n;
         }
-
 
         double partition (vector<double> *arr, int low, int high, vector< array<int, 2> > *sub_arr)
         {
@@ -709,20 +778,28 @@ class HierarchyNew
 
         }
 
+        void find_real_cluster(unsigned short *_cm)
+        {
+            while (num_points_in_cluster[ *_cm ] == 0) 
+            { 
+                *_cm = change_colors[*_cm]; 
+            }
+        }
+
         void color_pair(int _i, int _j, int *_cm)
         {
-            if ((work_field->points[_i].cluster_mark == 0) && (work_field->points[_j].cluster_mark == 0))
+            if ( (work_field->points[_i].cluster_mark == 0) && (work_field->points[_j].cluster_mark == 0) )
             {
                 work_field->points[_i].cluster_mark = *_cm;
                 work_field->points[_j].cluster_mark = *_cm;
                 num_points_in_cluster[*_cm] = 2; 
                 *_cm += 1;
             }          
-            else if (work_field->points[_i].cluster_mark * work_field->points[_j].cluster_mark == 0)
+            else if ( work_field->points[_i].cluster_mark * work_field->points[_j].cluster_mark == 0 )
             {
-                int new_cm = max(work_field->points[_i].cluster_mark, work_field->points[_j].cluster_mark);
+                unsigned short new_cm = max(work_field->points[_i].cluster_mark, work_field->points[_j].cluster_mark);
 
-                while (num_points_in_cluster[ new_cm ] == 0) { new_cm = change_colors[new_cm]; }
+                find_real_cluster(&new_cm);
 
                 work_field->points[_j].cluster_mark = new_cm;
                 work_field->points[_i].cluster_mark = new_cm;
@@ -731,26 +808,18 @@ class HierarchyNew
             }  
             else if ( (work_field->points[_i].cluster_mark != 0) && (work_field->points[_j].cluster_mark != 0) )
             {
-                while (num_points_in_cluster[ work_field->points[_i].cluster_mark ] == 0)
-                {
-                    work_field->points[_i].cluster_mark = change_colors[work_field->points[_i].cluster_mark];
-                }
-                while (num_points_in_cluster[ work_field->points[_j].cluster_mark ] == 0)
-                {
-                    work_field->points[_j].cluster_mark = change_colors[work_field->points[_j].cluster_mark];
-                }
+                find_real_cluster(&work_field->points[_i].cluster_mark);
+                find_real_cluster(&work_field->points[_j].cluster_mark);
 
                 if (num_points_in_cluster[work_field->points[_i].cluster_mark] < num_points_in_cluster[work_field->points[_j].cluster_mark])
                 {
                     change_colors[ work_field->points[_i].cluster_mark ] = work_field->points[_j].cluster_mark;
-                    //num_points_in_cluster[work_field->points[_j].cluster_mark] += num_points_in_cluster[work_field->points[_i].cluster_mark];
                     num_points_in_cluster[work_field->points[_i].cluster_mark] = 0;
                     num_points_in_cluster[work_field->points[_j].cluster_mark] += 1;
                 }
                 else
                 {
                     change_colors[ work_field->points[_j].cluster_mark ] = work_field->points[_i].cluster_mark;
-                    //num_points_in_cluster[work_field->points[_i].cluster_mark] += num_points_in_cluster[work_field->points[_j].cluster_mark];
                     num_points_in_cluster[work_field->points[_j].cluster_mark] = 0;
                     num_points_in_cluster[work_field->points[_i].cluster_mark] += 1;
                 }
@@ -762,10 +831,7 @@ class HierarchyNew
         {
             for (auto& point : work_field->points)
             {
-                while (num_points_in_cluster[ point.cluster_mark ] == 0)
-                {
-                    point.cluster_mark = change_colors[point.cluster_mark];
-                }
+                find_real_cluster(&point.cluster_mark);
             }
         }
 
@@ -788,6 +854,7 @@ class HierarchyNew
 
             for (int i = 0; i < distances.size(); ++i)
             {
+                //cout << i << " ";
                 color_pair(pairs[i][0], pairs[i][1], &cluster_mark);
 
                 if ((i > N*N*N) && (num_non_zeros_clusters(num_points_in_cluster) <= N))
@@ -799,75 +866,23 @@ class HierarchyNew
         }
 };
 
-class Hierarchy
-{
-    private:
-        SetPoints *workField;
-
-        void clastersToWorkField(Clusters *cls)
-        {
-            int i = 0;
-            int clsNum = 1;
-            for (auto& sp : cls->clusters)
-            {
-                if (sp.points.size() > 0)
-                {
-                    for (auto& point : sp.points)
-                    {
-                        point.cluster_mark = clsNum;
-                        workField->points[i] = point;
-                        i++;
-                    }
-                    clsNum++;
-                }
-            }
-        }
-
-    public:
-        Hierarchy(SetPoints *p_work_field)
-        {
-            workField = p_work_field;
-        }
-
-        void hierarchy()
-        {
-            Clusters allClusters;
-            allClusters.points_to_clusters(workField);
-            vector< vector<float> > matrixDistnce;
-            array<double, 3> ijr;
-
-            allClusters.create_matrix_distance(&matrixDistnce);
-
-            double curDelt = 1;
-            double prevDelt = 1;
-
-            while (true)
-            {
-                ijr = allClusters.get_nearest_clusters_idxs(&matrixDistnce);
-                prevDelt = curDelt;
-                curDelt = ijr[2];
-
-                cout << curDelt << " " << prevDelt << " :: " << curDelt/prevDelt << endl;
-                if (curDelt/prevDelt >= CDdivPD)
-                {
-                    break;
-                }
-
-                allClusters.clusters_union((int)ijr[0], (int)ijr[1], &matrixDistnce);
-            }
-            
-            clastersToWorkField(&allClusters);
-        }
-};
-
 class Search
 {
-    public:
-        SetPoints *workField;
-
-        Search(SetPoints *pfield)
+    private:
+        void preprocess_field_to_save(SetPoints *pwork_field)
         {
-            workField = pfield;
+            vector<int> cluster_marks;
+            for (auto& point : pwork_field->points)
+            {
+                if ( find(cluster_marks.begin(), cluster_marks.end(), point.cluster_mark) == cluster_marks.end() )
+                {
+                    cluster_marks.push_back( point.cluster_mark );
+                }
+            }
+            for (auto& point : pwork_field->points)
+            {
+                point.cluster_mark = find(cluster_marks.begin(), cluster_marks.end(), point.cluster_mark) - cluster_marks.begin() + 1;
+            }
         }
 
         void save_field_to_file(SetPoints *pwork_field, string file_name)
@@ -875,9 +890,9 @@ class Search
             ofstream pointsfile;
             pointsfile.open(file_name);
             //int i = 0;
+            preprocess_field_to_save(pwork_field);
             for (auto& point : pwork_field->points)
             {
-                
                 if ( (point.x != 0) && (point.y != 0) )
                 {
                     //cout << point.x << " " << point.y << " " << point.nearestCentroidNum << "\n";
@@ -886,6 +901,16 @@ class Search
                 }
             }
             //cout << i << endl;
+        }
+
+        
+
+    public:
+        SetPoints *workField;
+
+        Search(SetPoints *pfield)
+        {
+            workField = pfield;
         }
 
         void kmeans(int k)
@@ -919,7 +944,7 @@ class Search
 
 class Interface
 {
-    public:
+    private:
         SetPoints *work_field;
         Search *alg;
     
@@ -1000,6 +1025,7 @@ class Interface
             }
         }
 
+    public:
         void interact()
         {   
             cout << "Heyyyyyy, you are in a clustering programm!" << endl;
@@ -1013,7 +1039,6 @@ class Interface
                 cout << "4 :: start Hierarchy (Doesn't need clusters number)" << endl;
                 cout << "5 :: start HierarchyNew (Needs number of Clusters)" << endl; 
                 cout << "0 :: Exit" << endl;
-
 
                 cout << ">>> "; cin >> command;
                 if (command == 1)
@@ -1061,7 +1086,7 @@ class Interface
 };
 
 
-int main()
+int main(int argc, char *argv[])
 {   
     srand(time(NULL));
 
